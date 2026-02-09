@@ -5,13 +5,9 @@ drive_price_scraper.py
 ======================
 Amazon.co.jp の SSD・HDD 価格スクレイピング＋グラフ生成を一貫実行するツール。
 
-[Version 1.8]
-  - コンフィグ変数の整理（価格フィルタ係数、スリープ時間を定数化）
-  - 内部バージョン更新
-
 [Version 1.7]
   - 引数をユーザで管理出来るよう見える化
-  
+
 [Version 1.6]
   - 異常値フィルタを強化: 中央値(Median)基準で高額側をカットする機能を追加
     (Price > Median * 2.5 を除外)
@@ -132,7 +128,7 @@ import requests
 # ============================================================
 # ■ VERSION 管理
 # ============================================================
-VERSION = "1.8"
+VERSION = "1.7"
 
 
 # ============================================================
@@ -244,18 +240,81 @@ BAD_OFFER_PHRASES = [
     'There are no Featured Offer eligible offers',
 ]
 
-# [CHANGE] 価格フィルタ設定
-# 中央値(Median)を基準に、異常な安値・高値を除外するための係数です。
-# 下限: Median * PRICE_FILTER_LOW_RATIO 未満を除外
-PRICE_FILTER_LOW_RATIO = 0.3
-# 上限: Median * PRICE_FILTER_HIGH_RATIO 超過を除外
-PRICE_FILTER_HIGH_RATIO = 2.5
 
-# [CHANGE] スクレイピング時の待機設定
-# ページ遷移ごとの基本待機時間(秒)
-PAGE_SLEEP_SEC = 10.0
-# 追加ランダム待機の最大時間(秒)
-PAGE_JITTER_SEC = 2.0
+# ============================================================
+# LAYOUT CONFIGURATION SECTION
+# ============================================================
+# このセクションの数値を変更することで、グラフの見栄えを調整できます
+
+# --- Figure Size Settings ---
+FIGURE_WIDTH = 11              # グラフ全体の幅,default,16
+FIGURE_HEIGHT_BASE = 4.0       # 最小の高さ,default,4.0
+FIGURE_HEIGHT_PER_ROW = 0.65   # 1行あたりの追加高さ,default,0.65
+FIGURE_HEIGHT_OFFSET = 1.2     # 高さ計算のオフセット,default,1.2
+FIGURE_DPI = 90               # 解像度(DPI),default,120
+
+# --- Figure Margin Settings ---
+MARGIN_TOP = 0.95              # 上マージン(0.0-1.0),default,0.90
+MARGIN_BOTTOM = 0.05           # 下マージン(0.0-1.0),default,0.05
+MARGIN_RIGHT = 0.98           # 右マージン(0.0-1.0),default,0.995
+MARGIN_LEFT = 0.12             # 左マージン(0.0-1.0),default,0.05
+
+# --- Bar Chart Settings ---
+BAR_HEIGHT = 0.62              # バーの高さ (MAX),default,0.62
+BAR_AVG_RATIO = 0.70            # AVGバーの高さ比率(MAXバーに対する),default,0.7
+BAR_MIN_RATIO = 0.40           # MINバーの高さ比率(MAXバーに対する),default,0.45
+
+# --- Bar Color Settings ---
+COLOR_MAX = "#FF8888"          # MAX価格の色(赤系),default,#FF6666
+COLOR_AVG = "#66CC66"          # AVG価格の色(緑系),default,#66CC66
+COLOR_MIN = "#6666FF"          # MIN価格の色(青系),default,#6666FF
+
+# --- Bar Alpha (Transparency) Settings ---
+ALPHA_MAX = 0.38                # MAX価格の透明度(0.0-1.0),default,0.8
+ALPHA_AVG = 0.39                # AVG価格の透明度(0.0-1.0),default,0.9
+ALPHA_MIN = 0.40                # MIN価格の透明度(0.0-1.0),default,1.0
+
+# --- X-Axis Settings ---
+X_AXIS_MAX_BAR_POSITION = 0.92 # 最大バーがX軸上で表示される位置(0.0-1.0)
+                               # 例: 0.60 = グラフ幅の60%位置に最大値が来る,default,0.60
+
+# --- Text Area Layout Settings ---
+TEXT_START_MULTIPLIER = 0.10   # テキスト開始位置の倍率(global_max * この値),default,1.00
+TEXT_START_MIN_RATIO = 0.10    # テキスト開始位置の最小比率(xlim_right * この値),default,0.60
+
+# --- Column Width Settings (Text Area) ---
+# 各列の幅の比率。合計値で正規化されます。
+COLUMN_WIDTH_MIN = 1.1         # MIN列の幅,default,1.2
+COLUMN_WIDTH_AVG = 1.1         # AVG列の幅,default,1.2
+COLUMN_WIDTH_MAX = 1.1         # MAX列の幅,default,1.2
+COLUMN_WIDTH_CNT = 0.3         # Count列の幅(他より狭く設定),default,0.5
+
+# --- Title Settings ---
+TITLE_FONTSIZE = 16            # タイトルのフォントサイズ,default,16
+TITLE_PAD = 20                 # タイトルと図の間隔,default,20
+TITLE_Y_POSITION = 0.990        # タイトルのY位置(0.0-1.0),default,0.95
+
+# --- Legend Settings ---
+LEGEND_LOCATION = "lower right"        # 凡例の位置,default,
+LEGEND_BBOX_X = 0.99                   # 凡例のX位置(bbox_to_anchor),default,1.00
+LEGEND_BBOX_Y = 0.99                   # 凡例のY位置(bbox_to_anchor),default,1.01
+LEGEND_NCOL = 3                        # 凡例の列数,default,3
+LEGEND_FONTSIZE = 10                   # 凡例のフォントサイズ,default,10
+
+# --- Header Row Settings (Column Labels) ---
+HEADER_Y_POSITION = -0.45       # ヘッダー行のY位置(負の値で上に配置),default,-0.70
+HEADER_FONTSIZE = 10            # ヘッダーのフォントサイズ,default,10
+
+# --- Data Text Settings ---
+DATA_TEXT_FONTSIZE = 11         # データテキストのフォントサイズ,default,11
+DATA_COUNT_FONTSIZE = 11        # Count列のフォントサイズ,default,11
+
+# --- Y-Axis Label Settings ---
+Y_LABEL_FONTSIZE = 11           # Y軸ラベルのフォントサイズ,default,11
+
+# ============================================================
+# END OF LAYOUT CONFIGURATION SECTION
+# ============================================================
 
 
 # ============================================================
@@ -1080,30 +1139,34 @@ def plot_price_gauge(rows: list[StatRow], kind: str, date_str: str, out_path: Pa
 
     global_max = max(maxs) if maxs else 1.0
     
-    # [CHANGE] テキストエリア係数を 0.60
-    xlim_right = global_max / 0.60
-
-    fig_h = max(3.0, 0.65 * len(rows) + 1.2)
-    fig, ax = plt.subplots(figsize=(16, fig_h), dpi=120)
+    # グラフ高さ計算
+    fig_h = max(FIGURE_HEIGHT_BASE, FIGURE_HEIGHT_PER_ROW * len(rows) + FIGURE_HEIGHT_OFFSET)
     
-    # [CHANGE] 左右の余白を詰める
-    # left: 0.08 -> 0.05
-    # right: 0.98 -> 0.995 (ほぼ右端まで使う)
-    plt.subplots_adjust(top=0.88, bottom=0.06, right=0.995, left=0.05)
+    fig, ax = plt.subplots(figsize=(FIGURE_WIDTH, fig_h), dpi=FIGURE_DPI)
+    
+    # 余白調整
+    plt.subplots_adjust(top=MARGIN_TOP, bottom=MARGIN_BOTTOM, right=MARGIN_RIGHT, left=MARGIN_LEFT)
 
     y = list(range(len(rows)))
 
-    c_max = "#FF6666"
-    c_avg = "#66CC66"
-    c_min = "#6666FF"
+    # バーの描画
+    bar_h_max = BAR_HEIGHT
+    bar_h_avg = BAR_HEIGHT * BAR_AVG_RATIO
+    bar_h_min = BAR_HEIGHT * BAR_MIN_RATIO
 
-    ax.barh(y, maxs, color=c_max, alpha=0.8, height=0.62, label="MAX")
-    ax.barh(y, avgs, color=c_avg, alpha=0.9, height=0.44, label="AVG")
-    ax.barh(y, mins, color=c_min, alpha=1.0, height=0.28, label="MIN")
+    ax.barh(y, maxs, color=COLOR_MAX, alpha=ALPHA_MAX, height=bar_h_max, label="MAX")
+    ax.barh(y, avgs, color=COLOR_AVG, alpha=ALPHA_AVG, height=bar_h_avg, label="AVG")
+    ax.barh(y, mins, color=COLOR_MIN, alpha=ALPHA_MIN, height=bar_h_min, label="MIN")
 
     ax.set_yticks(y)
-    ax.set_yticklabels(labels, fontsize=11, fontweight='bold', fontfamily='sans-serif')
+    ax.set_yticklabels(labels, fontsize=Y_LABEL_FONTSIZE, fontweight='bold', fontfamily='sans-serif')
     ax.invert_yaxis()
+    
+    # X軸の範囲設定
+    if X_AXIS_MAX_BAR_POSITION > 0:
+        xlim_right = global_max / X_AXIS_MAX_BAR_POSITION
+    else:
+        xlim_right = global_max * 1.5
     ax.set_xlim(0, xlim_right)
 
     def price_fmt(x, pos):
@@ -1118,32 +1181,52 @@ def plot_price_gauge(rows: list[StatRow], kind: str, date_str: str, out_path: Pa
     ax.grid(axis="x", linestyle=":", alpha=0.4, color='gray')
     ax.set_axisbelow(True)
 
-    fig.suptitle(f"{kind} price gauge {date_str} (JPY)", fontsize=16, fontweight='bold', y=0.95)
+    # タイトル
+    fig.suptitle(f"{kind} price gauge {date_str} (JPY)", fontsize=TITLE_FONTSIZE, fontweight='bold', y=TITLE_Y_POSITION)
 
     # Legend
     handles, legend_labels = ax.get_legend_handles_labels()
     ax.legend(handles[::-1], legend_labels[::-1], 
-              loc="lower right", bbox_to_anchor=(1.0, 1.01), 
-              ncol=3, frameon=False, fontsize=10)
+              loc=LEGEND_LOCATION, bbox_to_anchor=(LEGEND_BBOX_X, LEGEND_BBOX_Y), 
+              ncol=LEGEND_NCOL, frameon=False, fontsize=LEGEND_FONTSIZE)
 
     # --- テキスト列レイアウト ---
-    x_cnt = xlim_right * 0.99
+    # 設定変数の比率に基づいて各カラムの幅と位置を計算する
     
-    w_cnt = xlim_right * 0.05
-    w_max = xlim_right * 0.12
-    w_avg = xlim_right * 0.12
-    w_min = xlim_right * 0.12
+    # テキストエリアの右端と左端の目安を計算
+    pos_right_limit = xlim_right * MARGIN_RIGHT
+    pos_left_limit  = max(global_max * TEXT_START_MULTIPLIER, xlim_right * TEXT_START_MIN_RATIO)
     
+    text_area_width = pos_right_limit - pos_left_limit
+    
+    # もし幅が取れない場合は最低限の幅を確保（安全策）
+    if text_area_width <= 0:
+        text_area_width = xlim_right * 0.3
+
+    # 各カラムの重み合計
+    total_weight = COLUMN_WIDTH_MIN + COLUMN_WIDTH_AVG + COLUMN_WIDTH_MAX + COLUMN_WIDTH_CNT
+    if total_weight <= 0: total_weight = 4.0
+
+    # 1ウェイトあたりの幅
+    unit_w = text_area_width / total_weight
+
+    # 各カラムの幅
+    w_cnt = unit_w * COLUMN_WIDTH_CNT
+    w_max = unit_w * COLUMN_WIDTH_MAX
+    w_avg = unit_w * COLUMN_WIDTH_AVG
+    w_min = unit_w * COLUMN_WIDTH_MIN
+    
+    # カラムの配置（右端基準）
+    x_cnt = pos_right_limit
     x_max = x_cnt - w_cnt
     x_avg = x_max - w_max
     x_min = x_avg - w_avg
 
     # ヘッダー描画
-    header_y = -0.7
-    ax.text(x_min, header_y, "MIN",   color=c_min, fontweight="bold", ha="right", fontsize=10)
-    ax.text(x_avg, header_y, "AVG",   color=c_avg, fontweight="bold", ha="right", fontsize=10)
-    ax.text(x_max, header_y, "MAX",   color=c_max, fontweight="bold", ha="right", fontsize=10)
-    ax.text(x_cnt, header_y, "Count", color="#333333", fontweight="bold", ha="right", fontsize=10)
+    ax.text(x_min, HEADER_Y_POSITION, "MIN",   color=COLOR_MIN, fontweight="bold", ha="right", fontsize=HEADER_FONTSIZE)
+    ax.text(x_avg, HEADER_Y_POSITION, "AVG",   color=COLOR_AVG, fontweight="bold", ha="right", fontsize=HEADER_FONTSIZE)
+    ax.text(x_max, HEADER_Y_POSITION, "MAX",   color=COLOR_MAX, fontweight="bold", ha="right", fontsize=HEADER_FONTSIZE)
+    ax.text(x_cnt, HEADER_Y_POSITION, "Count", color="#333333", fontweight="bold", ha="right", fontsize=HEADER_FONTSIZE)
 
     # 差分フォーマット用関数
     def fmt_price(curr, prev_val):
@@ -1164,22 +1247,22 @@ def plot_price_gauge(rows: list[StatRow], kind: str, date_str: str, out_path: Pa
         # MIN
         p_min = prev_row.min_price if prev_row else None
         t_min = fmt_price(r.min_price, p_min)
-        ax.text(x_min, i, t_min, va="center", ha="right", fontsize=11, family="monospace", fontweight='medium')
+        ax.text(x_min, i, t_min, va="center", ha="right", fontsize=DATA_TEXT_FONTSIZE, family="monospace", fontweight='medium')
 
         # AVG
         p_avg = prev_row.avg_price if prev_row else None
         t_avg = fmt_price(r.avg_price, p_avg)
-        ax.text(x_avg, i, t_avg, va="center", ha="right", fontsize=11, family="monospace", fontweight='medium')
+        ax.text(x_avg, i, t_avg, va="center", ha="right", fontsize=DATA_TEXT_FONTSIZE, family="monospace", fontweight='medium')
 
         # MAX
         p_max = prev_row.max_price if prev_row else None
         t_max = fmt_price(r.max_price, p_max)
-        ax.text(x_max, i, t_max, va="center", ha="right", fontsize=11, family="monospace", fontweight='medium')
+        ax.text(x_max, i, t_max, va="center", ha="right", fontsize=DATA_TEXT_FONTSIZE, family="monospace", fontweight='medium')
 
         # Count
-        ax.text(x_cnt, i, str(r.count), va="center", ha="right", fontsize=11, family="sans-serif")
+        ax.text(x_cnt, i, str(r.count), va="center", ha="right", fontsize=DATA_COUNT_FONTSIZE, family="sans-serif")
 
-    fig.savefig(str(out_path), dpi=120, bbox_inches=None)
+    fig.savefig(str(out_path), dpi=FIGURE_DPI, bbox_inches=None)
     if show:
         print(f"[INFO] Displaying plot for {kind}...")
         plt.show()
@@ -1251,8 +1334,8 @@ def main() -> int:
     ap.add_argument("--scrape", action="store_true", help="スクレイピング＋グラフ生成を実行")
     
     ap.add_argument("--base-dir", default=".",          help="データ検索・出力の基準ディレクトリ（デフォルト: .）")
-    ap.add_argument("--sleep",    type=float, default=PAGE_SLEEP_SEC, help=f"ページ間ウェイト秒（デフォルト: {PAGE_SLEEP_SEC}）")
-    ap.add_argument("--jitter",   type=float, default=PAGE_JITTER_SEC,  help=f"追加ランダム待機の上限秒（デフォルト: {PAGE_JITTER_SEC}）")
+    ap.add_argument("--sleep",    type=float, default=10.0, help="ページ間ウェイト秒（デフォルト: 10.0）")
+    ap.add_argument("--jitter",   type=float, default=2.0,  help="追加ランダム待機の上限秒（デフォルト: 2.0）")
     ap.add_argument("--timeout",  type=int,   default=40,   help="HTTPタイムアウト秒（デフォルト: 40）")
     ap.add_argument("--show",     action="store_true",  help="グラフを画像表示（GUI環境のみ）")
     
@@ -1264,8 +1347,8 @@ def main() -> int:
     ap.add_argument("--brand-only",        action="store_true", help="主要ブランドのみ")
     ap.add_argument("--no-capacity-match", action="store_true", help="容量一致フィルタ無効")
     ap.add_argument("--debug-save-all",    action="store_true", help="各ページHTMLを保存")
-    ap.add_argument("--low-price-ratio",   type=float, default=PRICE_FILTER_LOW_RATIO, help=f"安値異常値判定の係数。中央値 * R 未満を除外（デフォルト: {PRICE_FILTER_LOW_RATIO}）")
-    ap.add_argument("--high-price-ratio",  type=float, default=PRICE_FILTER_HIGH_RATIO, help=f"高値異常値判定の係数。中央値 * R 超過を除外（デフォルト: {PRICE_FILTER_HIGH_RATIO}）")
+    ap.add_argument("--low-price-ratio",   type=float, default=0.3, help="安値異常値判定の係数。中央値 * R 未満を除外（デフォルト: 0.3）")
+    ap.add_argument("--high-price-ratio",  type=float, default=2.5, help="高値異常値判定の係数。中央値 * R 超過を除外（デフォルト: 2.5）")
     ap.add_argument("--scale",   type=int, default=100, help="gaugeのバー描画スケール除数")
 
     sub = ap.add_subparsers(dest="command")
