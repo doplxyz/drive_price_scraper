@@ -5,6 +5,10 @@ drive_price_scraper.py
 ======================
 Amazon.co.jp の SSD・HDD 価格スクレイピング＋グラフ生成を一貫実行するツール。
 
+[Version 1.7]
+  - コンフィグ変数の整理（価格フィルタ係数、スリープ時間を定数化）
+  - 内部バージョン更新
+
 [Version 1.6]
   - 異常値フィルタを強化: 中央値(Median)基準で高額側をカットする機能を追加
     (Price > Median * 2.5 を除外)
@@ -125,7 +129,7 @@ import requests
 # ============================================================
 # ■ VERSION 管理
 # ============================================================
-VERSION = "1.6"
+VERSION = "1.7"
 
 
 # ============================================================
@@ -236,6 +240,19 @@ BAD_OFFER_PHRASES = [
     'does not meet the Featured Offer requirements',
     'There are no Featured Offer eligible offers',
 ]
+
+# [CHANGE] 価格フィルタ設定
+# 中央値(Median)を基準に、異常な安値・高値を除外するための係数です。
+# 下限: Median * PRICE_FILTER_LOW_RATIO 未満を除外
+PRICE_FILTER_LOW_RATIO = 0.3
+# 上限: Median * PRICE_FILTER_HIGH_RATIO 超過を除外
+PRICE_FILTER_HIGH_RATIO = 2.5
+
+# [CHANGE] スクレイピング時の待機設定
+# ページ遷移ごとの基本待機時間(秒)
+PAGE_SLEEP_SEC = 10.0
+# 追加ランダム待機の最大時間(秒)
+PAGE_JITTER_SEC = 2.0
 
 
 # ============================================================
@@ -1231,8 +1248,8 @@ def main() -> int:
     ap.add_argument("--scrape", action="store_true", help="スクレイピング＋グラフ生成を実行")
     
     ap.add_argument("--base-dir", default=".",          help="データ検索・出力の基準ディレクトリ（デフォルト: .）")
-    ap.add_argument("--sleep",    type=float, default=10.0, help="ページ間ウェイト秒（デフォルト: 10.0）")
-    ap.add_argument("--jitter",   type=float, default=2.0,  help="追加ランダム待機の上限秒（デフォルト: 2.0）")
+    ap.add_argument("--sleep",    type=float, default=PAGE_SLEEP_SEC, help=f"ページ間ウェイト秒（デフォルト: {PAGE_SLEEP_SEC}）")
+    ap.add_argument("--jitter",   type=float, default=PAGE_JITTER_SEC,  help=f"追加ランダム待機の上限秒（デフォルト: {PAGE_JITTER_SEC}）")
     ap.add_argument("--timeout",  type=int,   default=40,   help="HTTPタイムアウト秒（デフォルト: 40）")
     ap.add_argument("--show",     action="store_true",  help="グラフを画像表示（GUI環境のみ）")
     
@@ -1244,8 +1261,8 @@ def main() -> int:
     ap.add_argument("--brand-only",        action="store_true", help="主要ブランドのみ")
     ap.add_argument("--no-capacity-match", action="store_true", help="容量一致フィルタ無効")
     ap.add_argument("--debug-save-all",    action="store_true", help="各ページHTMLを保存")
-    ap.add_argument("--low-price-ratio",   type=float, default=0.3, help="安値異常値判定の係数。中央値 * R 未満を除外（デフォルト: 0.3）")
-    ap.add_argument("--high-price-ratio",  type=float, default=2.5, help="高値異常値判定の係数。中央値 * R 超過を除外（デフォルト: 2.5）")
+    ap.add_argument("--low-price-ratio",   type=float, default=PRICE_FILTER_LOW_RATIO, help=f"安値異常値判定の係数。中央値 * R 未満を除外（デフォルト: {PRICE_FILTER_LOW_RATIO}）")
+    ap.add_argument("--high-price-ratio",  type=float, default=PRICE_FILTER_HIGH_RATIO, help=f"高値異常値判定の係数。中央値 * R 超過を除外（デフォルト: {PRICE_FILTER_HIGH_RATIO}）")
     ap.add_argument("--scale",   type=int, default=100, help="gaugeのバー描画スケール除数")
 
     sub = ap.add_subparsers(dest="command")
