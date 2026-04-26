@@ -5,15 +5,15 @@ drive_price_scraper.py
 ======================
 Amazon.co.jp の SSD・HDD 価格スクレイピング＋グラフ生成を一貫実行するツール。
 
-[Version 1.8]
-  - 値段の異常値を弾く変数をユーザ管理しやすく揃えた
+[Version 1.6]
+  - 異常値フィルタを強化: 中央値(Median)基準で高額側をカットする機能を追加
+    (Price > Median * 2.5 を除外)
 
 [Version 1.7]
   - 引数をユーザで管理出来るよう見える化
 
-[Version 1.6]
-  - 異常値フィルタを強化: 中央値(Median)基準で高額側をカットする機能を追加
-    (Price > Median * 2.5 を除外)
+[Version 1.8]
+  - 値段の異常値を弾く変数をユーザ管理しやすく揃えた
 
 ============================================================
 [必要条件]
@@ -152,12 +152,14 @@ JITTER_INTERVAL = 2.0           # 追加ランダム待機の最大秒数 (defau
 
 # 下限: Median * RATIO 未満を除外
 # (安すぎる異常値や誤入力をカット)
-PRICE_LOWER_LIMIT_RATIO = 0.3   # (default: 0.3)
+PRICE_LOWER_LIMIT_RATIO = 0.30   # (default: 0.3)
+
 
 # 上限: Median * RATIO 超過を除外
 # (高すぎる転売価格や異常値をカット)
 # ※ 95%程度の分布をカバーする設定値として 2.5 を採用しています
-PRICE_UPPER_LIMIT_RATIO = 2.5   # (default: 2.5)
+PRICE_UPPER_LIMIT_RATIO = 1.75   # (default: 2.5)
+
 
 
 # [CHANGE] Amazon.co.jp のベースURL
