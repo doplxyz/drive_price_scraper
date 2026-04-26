@@ -1141,6 +1141,151 @@ def load_stats_from_dir(dirpath: Path, kind: str) -> list[StatRow]:
     return rows
 
 
+@dataclass
+class HistoryPoint:
+    date: datetime.date
+    avg_price: int
+
+
+def configure_matplotlib_japanese_fonts() -> None:
+    import importlib.util
+    import matplotlib
+
+    if importlib.util.find_spec("japanize_matplotlib") is not None:
+        import japanize_matplotlib  # noqa: F401
+        return
+
+    from matplotlib import font_manager
+    installed = {f.name for f in font_manager.fontManager.ttflist}
+    preferred = ["Noto Sans CJK JP", "TakaoGothic", "IPAGothic", "Yu Gothic", "Meiryo"]
+    for font_name in preferred:
+        if font_name in installed:
+            matplotlib.rcParams["font.family"] = font_name
+            break
+
+
+def parse_scrape_date_from_dirname(dir_name: str, kind: str) -> Optional[datetime.date]:
+    prefix = f"{kind.lower()}_scrape_"
+    if not dir_name.startswith(prefix):
+        return None
+    date_part = dir_name.replace(prefix, "", 1)
+    try:
+        return datetime.datetime.strptime(date_part, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def find_latest_previous_rows(base_dir: Path, kind: str, current_date: datetime.date) -> tuple[str, list[StatRow]]:
+    candidates: list[tuple[datetime.date, Path]] = []
+    for child in base_dir.iterdir():
+        if not child.is_dir():
+            continue
+        d = parse_scrape_date_from_dirname(child.name, kind)
+        if d is None or d >= current_date:
+            continue
+        candidates.append((d, child))
+
+    for d, data_dir in sorted(candidates, key=lambda x: x[0], reverse=True):
+        rows = load_stats_from_dir(data_dir, kind)
+        if rows:
+            return d.strftime("%Y-%m-%d"), rows
+    return "", []
+
+
+def load_history_map(base_dir: Path, kind: str) -> dict[str, list[HistoryPoint]]:
+    history: dict[str, list[HistoryPoint]] = {}
+    date_dirs: list[tuple[datetime.date, Path]] = []
+
+    for child in base_dir.iterdir():
+        if not child.is_dir():
+            continue
+        d = parse_scrape_date_from_dirname(child.name, kind)
+        if d is None:
+            continue
+        date_dirs.append((d, child))
+
+    for d, data_dir in sorted(date_dirs, key=lambda x: x[0]):
+        rows = load_stats_from_dir(data_dir, kind)
+        for row in rows:
+            history.setdefault(row.cap_label, []).append(HistoryPoint(date=d, avg_price=row.avg_price))
+    return history
+
+
+def _parse_capacity_for_sort(cap_label: str) -> float:
+    return _parse_cap_tb(cap_label)
+
+
+def plot_history_windows(history_map: dict[str, list[HistoryPoint]], kind: str, out_dir: Path, show: bool = False) -> list[Path]:
+    if not history_map:
+        return []
+
+    import matplotlib
+    if not show:
+        matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    configure_matplotlib_japanese_fonts()
+
+    windows = [
+        ("7days", "7日間", 7),
+        ("1month", "1ヶ月間", 30),
+        ("1year", "1年間", 365),
+        ("all", "全期間", None),
+    ]
+    series_palette = [
+        "#FF0033", "#0057FF", "#00C853", "#FF6D00",
+        "#AA00FF", "#00B8D4", "#FFD600", "#FF1744",
+        "#2979FF", "#00E676", "#FF9100", "#D500F9",
+        "#00E5FF", "#FFEA00", "#F50057", "#651FFF",
+    ]
+
+    sorted_labels = sorted(history_map.keys(), key=lambda x: (_parse_capacity_for_sort(x), x), reverse=True)
+    color_by_label = {label: series_palette[idx % len(series_palette)] for idx, label in enumerate(sorted_labels)}
+    all_dates = [p.date for points in history_map.values() for p in points]
+    if not all_dates:
+        return []
+
+    latest_date = max(all_dates)
+    earliest_date = min(all_dates)
+    outputs: list[Path] = []
+
+    for file_tag, title, days in windows:
+        min_date = earliest_date if days is None else latest_date - datetime.timedelta(days=days - 1)
+
+        fig, ax = plt.subplots(figsize=(12, 5), dpi=100)
+        plotted = False
+        for label in sorted_labels:
+            points = [p for p in history_map[label] if p.date >= min_date]
+            if not points:
+                continue
+            xs = [p.date for p in points]
+            ys = [p.avg_price for p in points]
+            ax.plot(xs, ys, marker="o", markersize=3.0, linewidth=1.4,
+                    color=color_by_label[label], alpha=0.9, label=label)
+            plotted = True
+
+        if not plotted:
+            plt.close(fig)
+            continue
+
+        ax.set_title(f"{kind} 平均価格推移 ({title})", fontsize=13, fontweight="bold")
+        ax.set_ylabel("価格 (JPY)")
+        ax.grid(True, linestyle=":", alpha=0.5)
+        ax.tick_params(axis="x", rotation=25, labelsize=8)
+        ax.tick_params(axis="y", labelsize=9)
+        ax.legend(loc="best", fontsize=8, frameon=False)
+        plt.tight_layout()
+
+        out_path = out_dir / f"drive_price_history_{kind}_{file_tag}.png"
+        plt.savefig(out_path)
+        outputs.append(out_path)
+        if show:
+            plt.show()
+        plt.close(fig)
+
+    return outputs
+
+
 def plot_price_gauge(rows: list[StatRow], kind: str, date_str: str, out_path: Path, 
                      scale: int = 100, show: bool = False, prev_rows: list[StatRow] = None) -> None:
     if not rows:
@@ -1152,6 +1297,7 @@ def plot_price_gauge(rows: list[StatRow], kind: str, date_str: str, out_path: Pa
 
     import matplotlib.pyplot as plt
     from matplotlib.ticker import FuncFormatter
+    configure_matplotlib_japanese_fonts()
 
     labels = [r.cap_label for r in rows]
     mins   = [r.min_price / scale for r in rows]
@@ -1220,34 +1366,20 @@ def plot_price_gauge(rows: list[StatRow], kind: str, date_str: str, out_path: Pa
     # --- テキスト列レイアウト ---
     # 設定変数の比率に基づいて各カラムの幅と位置を計算する
     
-    # テキストエリアの右端と左端の目安を計算
-    pos_right_limit = xlim_right * MARGIN_RIGHT
-    pos_left_limit  = max(global_max * TEXT_START_MULTIPLIER, xlim_right * TEXT_START_MIN_RATIO)
-    
-    text_area_width = pos_right_limit - pos_left_limit
-    
-    # もし幅が取れない場合は最低限の幅を確保（安全策）
-    if text_area_width <= 0:
-        text_area_width = xlim_right * 0.3
+    col_start_x = max(global_max * TEXT_START_MULTIPLIER, xlim_right * TEXT_START_MIN_RATIO)
+    text_width = xlim_right - col_start_x
+    if text_width <= 0:
+        text_width = xlim_right * 0.3
 
-    # 各カラムの重み合計
     total_weight = COLUMN_WIDTH_MIN + COLUMN_WIDTH_AVG + COLUMN_WIDTH_MAX + COLUMN_WIDTH_CNT
-    if total_weight <= 0: total_weight = 4.0
+    if total_weight <= 0:
+        total_weight = 4.0
+    unit_w = text_width / total_weight
 
-    # 1ウェイトあたりの幅
-    unit_w = text_area_width / total_weight
-
-    # 各カラムの幅
-    w_cnt = unit_w * COLUMN_WIDTH_CNT
-    w_max = unit_w * COLUMN_WIDTH_MAX
-    w_avg = unit_w * COLUMN_WIDTH_AVG
-    w_min = unit_w * COLUMN_WIDTH_MIN
-    
-    # カラムの配置（右端基準）
-    x_cnt = pos_right_limit
-    x_max = x_cnt - w_cnt
-    x_avg = x_max - w_max
-    x_min = x_avg - w_avg
+    x_min = col_start_x + unit_w * COLUMN_WIDTH_MIN
+    x_avg = x_min + unit_w * COLUMN_WIDTH_AVG
+    x_max = x_avg + unit_w * COLUMN_WIDTH_MAX
+    x_cnt = x_max + unit_w * COLUMN_WIDTH_CNT
 
     # ヘッダー描画
     ax.text(x_min, HEADER_Y_POSITION, "MIN",   color=COLOR_MIN, fontweight="bold", ha="right", fontsize=HEADER_FONTSIZE)
@@ -1302,28 +1434,23 @@ def run_gauge(date_str: str, base_dir: str = ".", ssd_dir: Optional[str] = None,
     s_dir = Path(ssd_dir).expanduser().resolve() if ssd_dir else base / f"ssd_scrape_{date_str}"
     h_dir = Path(hdd_dir).expanduser().resolve() if hdd_dir else base / f"hdd_scrape_{date_str}"
     
-    # 前日データの特定
+    # 直近過去データの特定（欠損日対応）
     try:
         dt = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
-        yesterday = dt - datetime.timedelta(days=1)
-        yesterday_str = yesterday.strftime("%Y-%m-%d")
     except ValueError:
-        yesterday_str = ""
-    
-    s_prev_dir = base / f"ssd_scrape_{yesterday_str}"
-    h_prev_dir = base / f"hdd_scrape_{yesterday_str}"
+        dt = datetime.date.today()
 
     print(f"--- SSD/HDD Price Gauge Tool ({date_str}) ---")
-    if yesterday_str:
-        print(f"Comparing with previous day: {yesterday_str}")
 
     # SSD
     if s_dir.is_dir():
         ssd_rows = load_stats_from_dir(s_dir, "SSD")
-        ssd_prev = load_stats_from_dir(s_prev_dir, "SSD") if s_prev_dir.is_dir() else []
+        prev_s_date, ssd_prev = find_latest_previous_rows(base, "SSD", dt)
         if ssd_rows:
             out = base / f"ssd_price_{date_str}.png"
             plot_price_gauge(ssd_rows, kind="SSD", date_str=date_str, out_path=out, scale=scale, show=show, prev_rows=ssd_prev)
+            if prev_s_date:
+                print(f"[INFO] SSD Previous Data: {prev_s_date}")
             print(f"[OK] SSD Graph saved: {out}")
         else:
             print(f"[WARN] SSD Directory found but no parsable logs in: {s_dir}")
@@ -1333,15 +1460,34 @@ def run_gauge(date_str: str, base_dir: str = ".", ssd_dir: Optional[str] = None,
     # HDD
     if h_dir.is_dir():
         hdd_rows = load_stats_from_dir(h_dir, "HDD")
-        hdd_prev = load_stats_from_dir(h_prev_dir, "HDD") if h_prev_dir.is_dir() else []
+        prev_h_date, hdd_prev = find_latest_previous_rows(base, "HDD", dt)
         if hdd_rows:
             out = base / f"hdd_price_{date_str}.png"
             plot_price_gauge(hdd_rows, kind="HDD", date_str=date_str, out_path=out, scale=scale, show=show, prev_rows=hdd_prev)
+            if prev_h_date:
+                print(f"[INFO] HDD Previous Data: {prev_h_date}")
             print(f"[OK] HDD Graph saved: {out}")
         else:
             print(f"[WARN] HDD Directory found but no parsable logs in: {h_dir}")
     else:
         print(f"[SKIP] HDD Directory not found: {h_dir}")
+
+
+def run_history(base_dir: str = ".", show: bool = False) -> None:
+    base = Path(base_dir).expanduser().resolve()
+    outputs: list[Path] = []
+
+    ssd_history = load_history_map(base, "SSD")
+    hdd_history = load_history_map(base, "HDD")
+
+    outputs.extend(plot_history_windows(ssd_history, "SSD", base, show=show))
+    outputs.extend(plot_history_windows(hdd_history, "HDD", base, show=show))
+
+    if outputs:
+        for p in outputs:
+            print(f"[OK] History graph saved: {p}")
+    else:
+        print("[WARN] No history graphs were generated. Ensure scrape directories exist.")
 
 
 # ============================================================
@@ -1353,6 +1499,7 @@ def _today_str() -> str:
 
 
 def main() -> int:
+    default_base_dir = Path(__file__).parent.resolve()
     ap = argparse.ArgumentParser(
         prog="drive_price_scraper.py",
         description="Amazon SSD/HDD 価格スクレイピング＋グラフ生成 統合ツール",
@@ -1360,7 +1507,7 @@ def main() -> int:
     
     ap.add_argument("--scrape", action="store_true", help="スクレイピング＋グラフ生成を実行")
     
-    ap.add_argument("--base-dir", default=".",          help="データ検索・出力の基準ディレクトリ（デフォルト: .）")
+    ap.add_argument("--base-dir", default=str(default_base_dir), help="データ検索・出力の基準ディレクトリ（デフォルト: スクリプト配置ディレクトリ）")
     ap.add_argument("--sleep",    type=float, default=SLEEP_INTERVAL, help=f"ページ間ウェイト秒（デフォルト: {SLEEP_INTERVAL}）")
     ap.add_argument("--jitter",   type=float, default=JITTER_INTERVAL,  help=f"追加ランダム待機の上限秒（デフォルト: {JITTER_INTERVAL}）")
     ap.add_argument("--timeout",  type=int,   default=40,   help="HTTPタイムアウト秒（デフォルト: 40）")
@@ -1384,6 +1531,7 @@ def main() -> int:
     sp_gauge.add_argument("--date",    default=_today_str(), help="処理対象の日付 YYYY-MM-DD（デフォルト: 今日）")
     sp_gauge.add_argument("--ssd-dir", default=None,         help="SSDログディレクトリを直接指定")
     sp_gauge.add_argument("--hdd-dir", default=None,         help="HDDログディレクトリを直接指定")
+    sub.add_parser("history", help="履歴推移グラフ(7日/1ヶ月/1年/全期間)を生成")
 
     args = ap.parse_args()
 
@@ -1468,6 +1616,11 @@ def main() -> int:
             hdd_dir=args.hdd_dir,
             show=args.show,
             scale=args.scale,
+        )
+    elif args.command == "history":
+        run_history(
+            base_dir=args.base_dir,
+            show=args.show,
         )
     else:
         ap.print_help()
